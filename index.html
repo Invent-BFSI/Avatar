@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AI Assistant</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="container">
+    <header class="topbar">
+      <div class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" fill="#2563eb"/>
+        </svg>
+        <span>AI Assistant</span>
+      </div>
+      <div class="session">
+        <span id="sessionId">Session: —</span>
+      </div>
+    </header>
+
+    <section class="stage">
+      <div class="avatar">
+        <!-- The Avatar (TTS) WebRTC stream will render here -->
+        <video id="avatarVideo" autoplay playsinline muted></video>
+      </div>
+
+      <div class="chat">
+        <ul id="messages" class="messages" aria-live="polite" aria-label="Message list"></ul>
+
+        <form id="composer" class="composer" autocomplete="off">
+          <button id="micBtn" type="button" class="btn icon" title="Hold to talk" aria-label="Hold to talk">
+            🎤
+          </button>
+          <input id="textInput" type="text" placeholder="Type a message..." aria-label="Type a message" />
+          <button id="sendBtn" type="submit" class="btn primary" aria-label="Send">Send</button>
+        </form>
+
+        <div class="toolbar">
+          <button id="startAvatarBtn" type="button" class="btn" aria-label="Connect avatar stream">Connect Avatar</button>
+          <button id="stopAvatarBtn" type="button" class="btn" aria-label="Disconnect avatar stream">Disconnect</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 // ======= CONFIG =======
-const BACKEND_BASE = "https://invest-soul-adeagbcufyhhfxc2.eastus2-01.azurewebsites.net";
+const BACKEND_BASE = "https://wonderful-bush-09095bf0f.4.azurestaticapps.net";
 // ======= UI ELEMENTS =======
 const messagesEl = document.getElementById("messages");
 const textInput = document.getElementById("textInput");
@@ -203,4 +203,5 @@ async function disconnectAvatar() {
     pc = null;
     avatarVideo.srcObject = null;
   }
+
 }

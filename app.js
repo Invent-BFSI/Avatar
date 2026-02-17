@@ -1,5 +1,5 @@
 // ======= CONFIG =======
-const BACKEND_BASE = "invest-soul-adeagbcufyhhfxc2.eastus2-01.azurewebsites.net";
+const BACKEND_BASE = "";
 // ======= UI ELEMENTS =======
 const messagesEl = document.getElementById("messages");
 const textInput = document.getElementById("textInput");
@@ -205,4 +205,5 @@ async function disconnectAvatar() {
   }
 
 }
+
 

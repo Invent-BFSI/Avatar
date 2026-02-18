@@ -109,3 +109,96 @@
     function loadVoices() {
       const voices = speechSynthesis.getVoices();
       voiceSel.innerHTML = "";
+      voices.forEach((v, i) => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = `${v.name} — ${v.lang}${v.default ? " (default)" : ""}`;
+        voiceSel.appendChild(opt);
+      });
+      // Try to auto-select a voice likely female by name
+      const prefer = voices.find(v => /female|woman|sara|salli|joanna|jenny|aria|zira|linda|maya|emma|olivia|susan/i.test(v.name));
+      if (prefer) voiceSel.value = prefer.name;
+    }
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    speakBtn.addEventListener('click', async () => {
+      ensureAudio();
+      await audioCtx.resume();
+
+      // Cancel any ongoing speech
+      speechSynthesis.cancel();
+
+      const utt = new SpeechSynthesisUtterance(textEl.value.trim());
+      // voice
+      const voice = speechSynthesis.getVoices().find(v => v.name === voiceSel.value);
+      if (voice) utt.voice = voice;
+      // params
+      utt.rate = parseFloat(rateEl.value);
+      utt.pitch = parseFloat(pitchEl.value);
+      utt.volume = parseFloat(volumeEl.value);
+
+      // Route TTS audio into our AudioContext (implementation detail):
+      // Most browsers pipe SpeechSynthesis directly to audio output and not to WebAudio.
+      // A robust workaround is to use "speak" and analyze via microphone loopback or
+      // to pre-generate audio. For demo, we keep amplitude animation time-based:
+      // We'll start an analysis loop and rely on actual speaker output presence.
+      // (Some browsers won’t expose TTS to WebAudio; amplitude will stay low.)
+      // For better accuracy, prefer pre-recorded audio (Option 1) or a TTS API that returns audio bytes.
+
+      speechSynthesis.speak(utt);
+      speakBtn.disabled = true;
+      stopBtn.disabled = false;
+
+      utt.onend = () => {
+        stopBtn.disabled = true;
+        speakBtn.disabled = false;
+        cancelAnimationFrame(rafId);
+        setMouthOpen(0);
+        bar.style.width = '0%';
+      };
+
+      loop();
+    });
+
+    stopBtn.addEventListener('click', () => {
+      speechSynthesis.cancel();
+    });
+
+    function loop() {
+      const buf = new Uint8Array(analyser.fftSize);
+      analyser.getByteTimeDomainData(buf);
+
+      let sumSq = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const v = (buf[i] - 128) / 128;
+        sumSq += v * v;
+      }
+      const rms = Math.sqrt(sumSq / buf.length);
+      const openTarget = clamp((rms - 0.015) / (0.22 - 0.015), 0, 1);
+
+      lastOpen = lastOpen * smoothing + openTarget * (1 - smoothing);
+
+      bar.style.width = Math.round(lastOpen * 100) + '%';
+      setMouthOpen(lastOpen);
+
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function setMouthOpen(x) {
+      const baseH = 6, maxExtra = 22;
+      const h = baseH + maxExtra * easeOut(x);
+      mouthGroup.setAttribute('transform', `translate(200,245) scale(1, ${1 + x * 0.65})`);
+      mouthHole.setAttribute('y', String(-h/2));
+      mouthHole.setAttribute('height', String(h));
+      teeth.setAttribute('opacity', String(0.7 * (1 - x)));
+      tongue.setAttribute('opacity', String(Math.max(0, (x - 0.25) * 1.5)));
+      tongue.setAttribute('ry', String(3 + 6 * x));
+      tongue.setAttribute('cy', String(6 + 5 * x));
+    }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function easeOut(t) { return 1 - Math.pow(1 - t, 2); }
+  </script>
+</body>
+</html>

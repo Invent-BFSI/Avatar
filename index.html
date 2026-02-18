@@ -2,143 +2,110 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>LiveAvatar Minimal Client</title>
+  <title>Girl Avatar — TTS Lip Sync</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <style>
-    body { font-family: system-ui, sans-serif; padding: 1rem; }
-    video { width: 100%; max-width: 720px; background: #000; border-radius: 8px; }
-    .controls { display: flex; gap: 8px; margin-top: 12px; }
-    button { padding: 8px 12px; }
-    .log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; margin-top: 12px; }
+    body { margin: 0; background:#0b1020; color:#fff; font-family: system-ui, sans-serif; min-height: 100svh; display:grid; place-items:center; padding:20px; }
+    .box { width: min(780px, 100%); display: grid; gap: 12px; }
+    .card { background:#0f1633; border:1px solid #21306a; border-radius:16px; padding:14px; }
+    textarea { width: 100%; min-height: 90px; border-radius:10px; border:1px solid #2a3c85; background:#0d1430; color:#fff; padding:10px; }
+    select, button { background:#1a2561; color:#fff; border:1px solid #2a3c85; border-radius:10px; padding:8px 12px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    .meter { height: 10px; border-radius:6px; background:#0e1531; overflow:hidden; border:1px solid #1e2a63; }
+    .bar { height:100%; width:0%; background: linear-gradient(90deg, #52e5ff, #ff78b9); transition: width .08s linear; }
+    .avatar{ display:grid; place-items:center; padding:18px; background:#0e1531; border-radius:16px; border:1px solid #1e2a63;}
+    svg{ width:320px; height:320px;}
+    .small{ font-size:12px; opacity:.85; }
   </style>
 </head>
 <body>
-  <h1>LiveAvatar Stream</h1>
-  <video id="remoteVideo" playsinline autoplay muted></video>
-  <div class="controls">
-    <button id="connectBtn">Connect</button>
-    <button id="disconnectBtn" disabled>Disconnect</button>
+  <div class="box">
+    <div class="card">
+      <div style="font-weight:700; font-size:18px;">Girl Avatar — TTS</div>
+      <div class="row" style="margin-top:8px;">
+        <select id="voiceSel"></select>
+        <input id="rate" type="range" min="0.5" max="1.5" step="0.05" value="1" title="Rate"/>
+        <span class="small">Rate</span>
+        <input id="pitch" type="range" min="0" max="2" step="0.05" value="1.2" title="Pitch"/>
+        <span class="small">Pitch</span>
+        <input id="volume" type="range" min="0" max="1" step="0.05" value="1" title="Volume"/>
+        <span class="small">Vol</span>
+      </div>
+      <textarea id="text">Hey! I’m your virtual assistant. How can I help you today?</textarea>
+      <div class="row">
+        <button id="speakBtn">Speak</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+      <div class="meter"><div id="bar" class="bar"></div></div>
+    </div>
+
+    <div class="avatar card">
+      <!-- Reuse the same SVG avatar/mouth -->
+      <svg viewBox="0 0 400 400" aria-label="Girl Avatar">
+        <path d="M60,170 C60,60 160,40 200,40 C240,40 340,60 340,170 L340,300 L60,300 Z" fill="#2c2444"/>
+        <ellipse cx="200" cy="200" rx="130" ry="150" fill="#ffd9e6"/>
+        <ellipse cx="160" cy="190" rx="16" ry="12" fill="#1b1b2d"/>
+        <ellipse cx="240" cy="190" rx="16" ry="12" fill="#1b1b2d"/>
+        <circle cx="166" cy="186" r="3" fill="#fff"/>
+        <circle cx="246" cy="186" r="3" fill="#fff"/>
+        <path d="M200 195 C198 208, 202 208, 200 215" stroke="#e6a9bd" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <g id="mouth" transform="translate(200,245)">
+          <path id="lipTop" d="M -26 0 Q 0 -6 26 0" fill="none" stroke="#ff78b9" stroke-width="4" stroke-linecap="round"/>
+          <path id="lipBot" d="M -26 0 Q 0 6 26 0"  fill="none" stroke="#ff78b9" stroke-width="4" stroke-linecap="round"/>
+          <rect id="mouthHole" x="-18" y="-3" width="36" height="6" rx="10" fill="#6c1a44"/>
+          <rect id="teeth" x="-16" y="-2" width="32" height="3" rx="2" fill="#ffdfea" opacity="0.7"/>
+          <ellipse id="tongue" cx="0" cy="6" rx="10" ry="3" fill="#ff6a9c" opacity="0"/>
+        </g>
+        <ellipse cx="130" cy="215" rx="18" ry="10" fill="#ffb1cd" opacity="0.6"/>
+        <ellipse cx="270" cy="215" rx="18" ry="10" fill="#ffb1cd" opacity="0.6"/>
+        <path d="M90,300 C130,330 270,330 310,300 L330,355 L70,355 Z" fill="#9aa6ff" />
+        <path d="M160,300 L200,330 L240,300" fill="#d6dbff"/>
+      </svg>
+    </div>
   </div>
-  <div class="log" id="log"></div>
+
+  <!-- Hidden <audio> driven by SpeechSynthesis via MediaStreamDestination -->
+  <audio id="out" autoplay></audio>
 
   <script>
-    const SIGNALING_URL = "wss://YOUR_BACKEND/signaling"; // <-- change this
-    const ICE_SERVERS = [
-      { urls: "stun:stun.l.google.com:19302" },
-      // If your backend provides TURN:
-      // { urls: "turn:turn.example.com:3478", username: "user", credential: "pass" },
-    ];
+    const voiceSel = document.getElementById('voiceSel');
+    const rateEl = document.getElementById('rate');
+    const pitchEl = document.getElementById('pitch');
+    const volumeEl = document.getElementById('volume');
+    const textEl = document.getElementById('text');
+    const speakBtn = document.getElementById('speakBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const bar = document.getElementById('bar');
 
-    const logEl = document.getElementById("log");
-    const v = document.getElementById("remoteVideo");
-    const connectBtn = document.getElementById("connectBtn");
-    const disconnectBtn = document.getElementById("disconnectBtn");
+    // Mouth SVG parts
+    const mouthGroup = document.getElementById('mouth');
+    const mouthHole = document.getElementById('mouthHole');
+    const tongue = document.getElementById('tongue');
+    const teeth = document.getElementById('teeth');
 
-    let pc = null;
-    let ws = null;
+    let audioCtx, analyser, dst, outNode, srcNode, rafId;
+    let lastOpen = 0;
+    const smoothing = 0.78;
 
-    function log(msg) {
-      console.log(msg);
-      logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-    }
-
-    async function start() {
-      connectBtn.disabled = true;
-      disconnectBtn.disabled = false;
-
-      // 1) Create RTCPeerConnection
-      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-      // 2) Handle remote tracks (LiveAvatar video/audio)
-      const remoteStream = new MediaStream();
-      v.srcObject = remoteStream;
-      pc.addEventListener("track", (ev) => {
-        log(`Remote track: kind=${ev.track.kind}`);
-        remoteStream.addTrack(ev.track);
-      });
-
-      // 3) Optional: upstream mic if your LiveAvatar needs user audio
-      // try {
-      //   const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      //   mic.getTracks().forEach(t => pc.addTrack(t, mic));
-      // } catch (e) {
-      //   log("Mic disabled or unavailable, continuing without upstream audio.");
-      // }
-
-      // 4) Connect WebSocket for signaling
-      ws = new WebSocket(SIGNALING_URL);
-      ws.onopen = async () => {
-        log("Signaling connected.");
-        // 5) Create data channel (optional, for text commands to avatar)
-        const dc = pc.createDataChannel("commands");
-        dc.onopen = () => log("Data channel open.");
-        dc.onmessage = (e) => log("DC message: " + e.data);
-
-        // 6) Exchange ICE candidates through WS
-        pc.onicecandidate = (ev) => {
-          if (ev.candidate && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "candidate", candidate: ev.candidate }));
-          }
-        };
-
-        // 7) Create and send Offer
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true,
-        });
-        await pc.setLocalDescription(offer);
-        ws.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
-        log("Offer sent.");
-      };
-
-      ws.onmessage = async (message) => {
-        const data = JSON.parse(message.data);
-        if (data.type === "answer") {
-          log("Answer received.");
-          await pc.setRemoteDescription({ type: "answer", sdp: data.sdp });
-        } else if (data.type === "candidate" && data.candidate) {
-          log("Remote ICE candidate received.");
-          try {
-            await pc.addIceCandidate(data.candidate);
-          } catch (err) {
-            log("Error adding ICE candidate: " + err);
-          }
-        } else if (data.type === "error") {
-          log("Server error: " + data.message);
-        }
-      };
-
-      ws.onerror = (e) => log("WS error: " + JSON.stringify(e));
-      ws.onclose = () => log("Signaling closed.");
-    }
-
-    async function stop() {
-      disconnectBtn.disabled = true;
-      connectBtn.disabled = false;
-
-      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
-      ws = null;
-
-      if (pc) {
-        pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch {} });
-        pc.getReceivers().forEach(r => { try { r.track && r.track.stop(); } catch {} });
-        pc.onicecandidate = null;
-        pc.ontrack = null;
-        pc.close();
+    function ensureAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 1024;
+        analyser.smoothingTimeConstant = 0.7;
+        dst = audioCtx.createMediaStreamDestination();
+        // Connect the destination to an <audio> to hear it
+        const out = document.getElementById('out');
+        out.srcObject = dst.stream;
+        out.volume = 1.0;
+        // Also analyze the same stream
+        outNode = audioCtx.createMediaStreamSource(dst.stream);
+        outNode.connect(analyser);
+        analyser.connect(audioCtx.destination); // optional: also route to speakers for timing
       }
-      pc = null;
-
-      // Clear video
-      v.pause();
-      v.srcObject = null;
-      log("Disconnected.");
     }
 
-    connectBtn.addEventListener("click", start);
-    disconnectBtn.addEventListener("click", stop);
-
-    // Autoplay policies: muted attribute is set. User interaction (click) also helps.
-    // If your browser blocks autoplay with sound, keep `muted` on the <video>.
-  </script>
-</body>
-</html>
+    // Populate voices & prefer female
+    function loadVoices() {
+      const voices = speechSynthesis.getVoices();
+      voiceSel.innerHTML = "";

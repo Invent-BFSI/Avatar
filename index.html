@@ -1,538 +1,144 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Full-Body Animated Avatar (TTS + Optional STT)</title>
-<style>
-  :root{
-    --bg:#0f172a;
-    --panel:#0b1223;
-    --border:#1f2937;
-    --text:#e5e7eb;
-    --muted:#94a3b8;
-    --accent:#6366f1;
-
-    /* Avatar palette (tweak live with color pickers) */
-    --skin:#f0d1c8;
-    --hair:#2d1b16;
-    --top:#3b82f6;
-    --bottom:#1f2937;
-    --shoe:#111827;
-    --lip:#b91c1c;
-  }
-  *{ box-sizing:border-box; }
-  body{
-    margin:0;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
-    color:var(--text);
-    background:
-      radial-gradient(1200px 700px at 15% 10%, #1f2937 0%, var(--bg) 55%),
-      radial-gradient(1000px 600px at 85% 20%, #0b1223 0%, var(--bg) 55%),
-      linear-gradient(180deg, #0b1223, var(--bg));
-    min-height:100dvh;
-    display:grid;
-    place-items:center;
-    padding:24px;
-  }
-  .wrap{
-    width:min(1100px, 94vw);
-    display:grid;
-    grid-template-columns: 430px 1fr;
-    gap:22px;
-  }
-  @media (max-width:950px){ .wrap{ grid-template-columns:1fr; } }
-
-  .card{
-    background:linear-gradient(180deg, var(--panel), #0a1020);
-    border:1px solid var(--border);
-    border-radius:16px;
-    box-shadow:0 10px 30px rgba(0,0,0,.35);
-  }
-  .avatar-card{ padding:18px; display:grid; justify-items:center; }
-  .controls-card{ padding:18px; }
-  h1{ font-size:1.25rem; margin:0 0 10px; }
-  .hint{ color:var(--muted); font-size:.92rem; margin-bottom:14px; }
-  .status{ color:var(--muted); margin-top:10px; font-size:.9rem; text-align:center; }
-
-  .stage{
-    width:min(420px, 92vw);
-    aspect-ratio: 3 / 4.4; /* tall area */
-    display:grid;
-    place-items:center;
-  }
-
-  /* Buttons & inputs */
-  .stack{ display:grid; gap:12px; }
-  .row{ display:flex; gap:10px; flex-wrap:wrap; }
-  .row > * { flex:1; }
-  textarea{
-    width:100%; min-height:90px; resize:vertical;
-    border-radius:12px; border:1px solid var(--border);
-    background:#050a17; color:var(--text); padding:12px 14px;
-    outline:none;
-  }
-  select, input[type="range"], input[type="color"]{
-    width:100%; border-radius:10px; padding:10px 12px;
-    background:#050a17; color:var(--text); border:1px solid var(--border); outline:none;
-  }
-  .btn{
-    cursor:pointer; border:none; border-radius:12px; color:white;
-    background:linear-gradient(135deg, var(--accent), #7c3aed);
-    padding:12px 16px; font-weight:600; display:inline-flex; align-items:center; justify-content:center; gap:8px;
-    transition:transform .05s ease, opacity .2s ease;
-    user-select:none;
-  }
-  .btn.secondary{ background:#1f2937; color:var(--text); border:1px solid var(--border); }
-  .btn:active{ transform:scale(.98); }
-  .btn[disabled]{ opacity:.6; cursor:not-allowed; }
-
-  /* ===== Avatar Animations ===== */
-  svg * { vector-effect: non-scaling-stroke; }
-  /* Let CSS origins use the element bounding box for predictable pivots */
-  .pivot{ transform-box: fill-box; transform-origin: center; }
-
-  /* Idle breathing (torso up-down) + slight lean */
-  @keyframes breathe {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50%      { transform: translateY(2px) rotate(-0.4deg); }
-  }
-  /* Hair gentle sway */
-  @keyframes hairSway {
-    0%, 100% { transform: rotate(0deg); }
-    50%      { transform: rotate(2deg); }
-  }
-  /* Blink */
-  @keyframes blink {
-    0%, 96%, 100% { transform: scaleY(1); }
-    97%, 99%      { transform: scaleY(0.05); }
-  }
-  /* Talking mouth (JS toggles scale) */
-  .mouth{ transition: transform 60ms ease, fill 160ms ease; transform-origin:50% 50%; fill:var(--lip); }
-  .talking .mouth { transform: scaleY(1.9); fill:#e11d48; }
-
-  /* Wave (right arm upper + lower) */
-  @keyframes waveUpper {
-    0%, 100% { transform: rotate(12deg); }
-    50%      { transform: rotate(35deg); }
-  }
-  @keyframes waveLower {
-    0%, 100% { transform: rotate(20deg); }
-    50%      { transform: rotate(55deg); }
-  }
-
-  /* Walk cycle (limb swings & body bob) */
-  @keyframes bob {
-    0%, 100% { transform: translateY(0px); }
-    50%      { transform: translateY(3px); }
-  }
-  @keyframes swingFwd   { 0%,100% { transform: rotate(22deg); } 50% { transform: rotate(-22deg);} }
-  @keyframes swingBack  { 0%,100% { transform: rotate(-22deg);} 50% { transform: rotate(22deg); } }
-  @keyframes kneeBendF  { 0%,100% { transform: rotate( 8deg);} 50% { transform: rotate(18deg); } }
-  @keyframes kneeBendB  { 0%,100% { transform: rotate(18deg);} 50% { transform: rotate( 8deg); } }
-  @keyframes armFwd     { 0%,100% { transform: rotate(20deg);} 50% { transform: rotate(-20deg);} }
-  @keyframes armBack    { 0%,100% { transform: rotate(-20deg);} 50% { transform: rotate(20deg); } }
-
-  /* Shadow pulse for depth */
-  @keyframes shadowPulse { 0%,100% { transform: scaleX(1); opacity:.35; } 50% { transform: scaleX(0.9); opacity:.25; } }
-
-  /* States */
-  .avatar.idle    .torso { animation: breathe 3.2s ease-in-out infinite; }
-  .avatar.idle    .hair  { animation: hairSway 4.6s ease-in-out infinite; }
-  .avatar .blinkLids { animation: blink 6s infinite; transform-origin:50% 50%; }
-  .avatar.walking .body { animation: bob 600ms ease-in-out infinite; }
-  .avatar.walking #shadow { animation: shadowPulse 600ms ease-in-out infinite; transform-origin:50% 50%; }
-
-  /* Walking limbs */
-  .avatar.walking .legL.upper { animation: swingFwd 600ms ease-in-out infinite; }
-  .avatar.walking .legL.lower { animation: kneeBendF 600ms ease-in-out infinite; }
-  .avatar.walking .legR.upper { animation: swingBack 600ms ease-in-out infinite; }
-  .avatar.walking .legR.lower { animation: kneeBendB 600ms ease-in-out infinite; }
-
-  .avatar.walking .armL.upper { animation: armBack 600ms ease-in-out infinite; }
-  .avatar.walking .armL.lower { animation: armBack 600ms ease-in-out infinite; }
-  .avatar.walking .armR.upper { animation: armFwd 600ms ease-in-out infinite; }
-  .avatar.walking .armR.lower { animation: armFwd 600ms ease-in-out infinite; }
-
-  /* Wave state overrides walking arms if both toggled (priority by specificity) */
-  .avatar.waving .armR.upper { animation: waveUpper 900ms ease-in-out infinite; }
-  .avatar.waving .armR.lower { animation: waveLower 900ms ease-in-out infinite; }
-
-  /* Prefers reduced motion */
-  @media (prefers-reduced-motion: reduce){
-    .avatar *{ animation: none !important; transition: none !important; }
-  }
-
-  .footer-hint{ color:var(--muted); margin-top:8px; font-size:.82rem; text-align:center; }
-</style>
+  <meta charset="utf-8"/>
+  <title>LiveAvatar Minimal Client</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 1rem; }
+    video { width: 100%; max-width: 720px; background: #000; border-radius: 8px; }
+    .controls { display: flex; gap: 8px; margin-top: 12px; }
+    button { padding: 8px 12px; }
+    .log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; margin-top: 12px; }
+  </style>
 </head>
 <body>
-  <div class="wrap">
-    <!-- ===== Avatar Panel ===== -->
-    <section class="card avatar-card">
-      <div class="stage">
-        <!-- Ground shadow -->
-        <svg viewBox="0 0 320 520" width="100%" role="img" aria-labelledby="t d">
-          <title id="t">Full-Body Speaking Avatar</title>
-          <desc id="d">A friendly full-body female avatar that can speak and animate.</desc>
-
-          <!-- soft background halo -->
-          <defs>
-            <radialGradient id="halo" cx="50%" cy="15%" r="60%">
-              <stop offset="0%" stop-color="#1e293b" stop-opacity="0.9"/>
-              <stop offset="100%" stop-color="transparent" stop-opacity="0"/>
-            </radialGradient>
-          </defs>
-          <rect x="0" y="0" width="320" height="520" fill="url(#halo)"/>
-
-          <!-- Shadow -->
-          <ellipse id="shadow" cx="160" cy="470" rx="70" ry="14" fill="#000" opacity=".28"/>
-
-          <!-- ===== Avatar (grouped for transforms) ===== -->
-          <g id="avatar" class="avatar idle" transform="translate(0,0)">
-            <!-- Wrap everything for bobbing -->
-            <g class="body pivot">
-
-              <!-- LEGS (behind torso) -->
-              <!-- Left leg -->
-              <g class="legL upper pivot" style="transform-origin: 145px 380px;">
-                <rect x="135" y="310" width="18" height="80" rx="9" fill="var(--bottom)" stroke="#0d1322" stroke-width="1.2"/>
-                <g class="legL lower pivot" style="transform-origin: 144px 390px;">
-                  <rect x="135" y="380" width="18" height="70" rx="9" fill="var(--bottom)" stroke="#0d1322" stroke-width="1.2"/>
-                  <rect x="129" y="448" width="30" height="14" rx="6" fill="var(--shoe)"/>
-                </g>
-              </g>
-              <!-- Right leg -->
-              <g class="legR upper pivot" style="transform-origin: 176px 380px;">
-                <rect x="168" y="310" width="18" height="80" rx="9" fill="var(--bottom)" stroke="#0d1322" stroke-width="1.2"/>
-                <g class="legR lower pivot" style="transform-origin: 176px 390px;">
-                  <rect x="168" y="380" width="18" height="70" rx="9" fill="var(--bottom)" stroke="#0d1322" stroke-width="1.2"/>
-                  <rect x="162" y="448" width="30" height="14" rx="6" fill="var(--shoe)"/>
-                </g>
-              </g>
-
-              <!-- TORSO -->
-              <g class="torso pivot" style="transform-origin: 160px 250px;">
-                <!-- Top -->
-                <path d="M115,200 q45 -18 90 0 v100 q-45 22 -90 0 z" fill="var(--top)" stroke="#0d1322" stroke-width="1.4"/>
-                <!-- Waist connector -->
-                <rect x="118" y="295" width="84" height="18" rx="8" fill="#2b3a8a" opacity=".45"/>
-                <!-- Neck -->
-                <rect x="150" y="190" width="20" height="22" rx="6" fill="var(--skin)"/>
-              </g>
-
-              <!-- ARMS -->
-              <!-- Left arm (behind) -->
-              <g class="armL upper pivot" style="transform-origin: 120px 235px;">
-                <rect x="103" y="210" width="18" height="70" rx="9" fill="var(--top)" stroke="#0d1322" stroke-width="1.2"/>
-                <g class="armL lower pivot" style="transform-origin: 112px 280px;">
-                  <rect x="103" y="275" width="18" height="60" rx="9" fill="var(--skin)" stroke="#0d1322" stroke-width="1.2"/>
-                  <circle cx="112" cy="335" r="8" fill="var(--skin)"/>
-                </g>
-              </g>
-
-              <!-- Right arm (front, waves) -->
-              <g class="armR upper pivot" style="transform-origin: 200px 235px;">
-                <rect x="199" y="210" width="18" height="70" rx="9" fill="var(--top)" stroke="#0d1322" stroke-width="1.2"/>
-                <g class="armR lower pivot" style="transform-origin: 208px 280px;">
-                  <rect x="199" y="275" width="18" height="60" rx="9" fill="var(--skin)" stroke="#0d1322" stroke-width="1.2"/>
-                  <!-- Hand -->
-                  <circle cx="208" cy="335" r="8" fill="var(--skin)"/>
-                </g>
-              </g>
-
-              <!-- HEAD -->
-              <g class="head pivot" style="transform-origin: 160px 170px;">
-                <!-- Hair back -->
-                <ellipse class="hair pivot" cx="160" cy="160" rx="58" ry="60" fill="var(--hair)"/>
-                <!-- Face -->
-                <ellipse cx="160" cy="165" rx="48" ry="52" fill="var(--skin)"/>
-                <!-- Ears -->
-                <ellipse cx="116" cy="168" rx="8" ry="10" fill="var(--skin)"/>
-                <ellipse cx="204" cy="168" rx="8" ry="10" fill="var(--skin)"/>
-                <!-- Hair fringe -->
-                <path class="hair pivot" d="M110,150 q50 -40 100 0 q-18 -10 -40 -10 q-22 0 -60 10 z" fill="var(--hair)"/>
-
-                <!-- Eyes -->
-                <g class="eyes">
-                  <g class="blinkLids" transform="translate(0,0)">
-                    <ellipse cx="145" cy="165" rx="8" ry="5" fill="#1f2937"/>
-                    <ellipse cx="175" cy="165" rx="8" ry="5" fill="#1f2937"/>
-                  </g>
-                </g>
-
-                <!-- Brows -->
-                <path d="M136,155 q10 -8 20 0" stroke="#1f2937" stroke-width="3.2" fill="none" stroke-linecap="round"/>
-                <path d="M164,155 q10 -8 20 0" stroke="#1f2937" stroke-width="3.2" fill="none" stroke-linecap="round"/>
-                <!-- Nose -->
-                <path d="M160,165 q-3 8 0 12" stroke="#9b6c63" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-
-                <!-- Mouth -->
-                <ellipse id="mouth" class="mouth" cx="160" cy="188" rx="9.5" ry="4.5"/>
-              </g>
-            </g>
-          </g>
-        </svg>
-      </div>
-      <div id="status" class="status">Status: Idle</div>
-      <div class="footer-hint">Tip: Use <strong>Wave</strong> or <strong>Walk</strong> to animate the body. Try <strong>Speak</strong> while walking.</div>
-    </section>
-
-    <!-- ===== Controls Panel ===== -->
-    <section class="card controls-card">
-      <h1>Control the Avatar</h1>
-      <div class="hint">Type something and click <strong>Speak</strong>. Use the mic to dictate (Chrome/Edge).</div>
-
-      <div class="stack">
-        <textarea id="text" placeholder="Say something for the avatar to speak">Hello! I’m your full-body animated avatar. Let’s move and talk!</textarea>
-
-        <div class="row">
-          <div class="stack">
-            <label for="voice">Voice</label>
-            <select id="voice" aria-label="Voice selector"></select>
-          </div>
-          <div class="stack">
-            <label for="rate">Rate: <span id="rateVal">1.00</span></label>
-            <input id="rate" type="range" min="0.6" max="1.4" step="0.01" value="1.00"/>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="stack">
-            <label for="pitch">Pitch: <span id="pitchVal">1.00</span></label>
-            <input id="pitch" type="range" min="0.5" max="2" step="0.01" value="1.00"/>
-          </div>
-          <div class="stack">
-            <label for="volume">Volume: <span id="volVal">1.00</span></label>
-            <input id="volume" type="range" min="0" max="1" step="0.01" value="1.00"/>
-          </div>
-        </div>
-
-        <div class="row">
-          <button id="speakBtn" class="btn">🔊 Speak</button>
-          <button id="stopBtn" class="btn secondary">⏹ Stop</button>
-          <button id="micBtn" class="btn secondary" title="Start/Stop Recognition">🎤 Mic</button>
-        </div>
-
-        <div class="row">
-          <button id="idleBtn"  class="btn secondary">💤 Idle</button>
-          <button id="waveBtn"  class="btn secondary">👋 Wave</button>
-          <button id="walkBtn"  class="btn secondary">🚶 Walk</button>
-        </div>
-
-        <div class="row">
-          <div class="stack">
-            <label>Hair</label>
-            <input type="color" id="hairColor" value="#2d1b16"/>
-          </div>
-          <div class="stack">
-            <label>Top</label>
-            <input type="color" id="topColor" value="#3b82f6"/>
-          </div>
-          <div class="stack">
-            <label>Bottom</label>
-            <input type="color" id="bottomColor" value="#1f2937"/>
-          </div>
-          <div class="stack">
-            <label>Skin</label>
-            <input type="color" id="skinColor" value="#f0d1c8"/>
-          </div>
-        </div>
-      </div>
-    </section>
+  <h1>LiveAvatar Stream</h1>
+  <video id="remoteVideo" playsinline autoplay muted></video>
+  <div class="controls">
+    <button id="connectBtn">Connect</button>
+    <button id="disconnectBtn" disabled>Disconnect</button>
   </div>
+  <div class="log" id="log"></div>
 
-<script>
-(() => {
-  // ====== Elements ======
-  const textEl  = document.getElementById('text');
-  const voiceEl = document.getElementById('voice');
-  const rateEl  = document.getElementById('rate');
-  const pitchEl = document.getElementById('pitch');
-  const volEl   = document.getElementById('volume');
-  const rateVal = document.getElementById('rateVal');
-  const pitchVal= document.getElementById('pitchVal');
-  const volVal  = document.getElementById('volVal');
-
-  const speakBtn= document.getElementById('speakBtn');
-  const stopBtn = document.getElementById('stopBtn');
-  const micBtn  = document.getElementById('micBtn');
-
-  const idleBtn = document.getElementById('idleBtn');
-  const waveBtn = document.getElementById('waveBtn');
-  const walkBtn = document.getElementById('walkBtn');
-
-  const statusEl= document.getElementById('status');
-  const mouthEl = document.getElementById('mouth');
-  const avatar  = document.getElementById('avatar');
-
-  const hairColor   = document.getElementById('hairColor');
-  const topColor    = document.getElementById('topColor');
-  const bottomColor = document.getElementById('bottomColor');
-  const skinColor   = document.getElementById('skinColor');
-
-  // ====== Voice setup ======
-  let voices = [];
-  let boundaryTicker = null;
-  let isTalking = false;
-  let rec = null;
-
-  function setStatus(s){ statusEl.textContent = 'Status: ' + s; }
-  function setMouth(open){
-    if(open){ avatar.classList.add('talking'); }
-    else    { avatar.classList.remove('talking'); }
-  }
-
-  function populateVoices() {
-    voices = window.speechSynthesis ? speechSynthesis.getVoices() : [];
-    voiceEl.innerHTML = '';
-    voices.forEach(v => {
-      const opt = document.createElement('option');
-      opt.value = v.name;
-      opt.textContent = `${v.name} (${v.lang})${v.default ? ' — default' : ''}`;
-      voiceEl.appendChild(opt);
-    });
-    // Choose a female-ish voice if found (heuristic)
-    const preferred = [
-      'Microsoft Zira', 'Microsoft Aria Online', 'Microsoft Jenny',
-      'Google UK English Female', 'Google US English',
-      'Samantha', 'Victoria', 'Allison', 'Ava', 'Nicky',
-      'en-US-Wavenet-F', 'en-US-Neural2-F'
+  <script>
+    const SIGNALING_URL = "wss://YOUR_BACKEND/signaling"; // <-- change this
+    const ICE_SERVERS = [
+      { urls: "stun:stun.l.google.com:19302" },
+      // If your backend provides TURN:
+      // { urls: "turn:turn.example.com:3478", username: "user", credential: "pass" },
     ];
-    const chosen = voices.find(v => preferred.some(n => v.name.includes(n))) ||
-                   voices.find(v => v.default) || voices[0];
-    if(chosen){ voiceEl.value = chosen.name; }
-  }
 
-  if('speechSynthesis' in window){
-    populateVoices();
-    if(typeof speechSynthesis.onvoiceschanged !== 'undefined'){
-      speechSynthesis.onvoiceschanged = populateVoices;
+    const logEl = document.getElementById("log");
+    const v = document.getElementById("remoteVideo");
+    const connectBtn = document.getElementById("connectBtn");
+    const disconnectBtn = document.getElementById("disconnectBtn");
+
+    let pc = null;
+    let ws = null;
+
+    function log(msg) {
+      console.log(msg);
+      logEl.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
     }
-  } else {
-    setStatus('Speech synthesis not supported in this browser.');
-    speakBtn.disabled = true;
-  }
 
-  // Live labels
-  rateEl.addEventListener('input', () => rateVal.textContent  = Number(rateEl.value).toFixed(2));
-  pitchEl.addEventListener('input',()=> pitchVal.textContent = Number(pitchEl.value).toFixed(2));
-  volEl.addEventListener('input',  ()=> volVal.textContent   = Number(volEl.value).toFixed(2));
+    async function start() {
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = false;
 
-  // ====== Speaking ======
-  function speak(text){
-    if(!('speechSynthesis' in window)) return;
-    if(speechSynthesis.speaking) speechSynthesis.cancel();
+      // 1) Create RTCPeerConnection
+      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    const u = new SpeechSynthesisUtterance(text || textEl.value.trim());
-    const selected = voices.find(v => v.name === voiceEl.value);
-    if(selected) u.voice = selected;
-    u.rate = Number(rateEl.value);
-    u.pitch= Number(pitchEl.value);
-    u.volume = Number(volEl.value);
+      // 2) Handle remote tracks (LiveAvatar video/audio)
+      const remoteStream = new MediaStream();
+      v.srcObject = remoteStream;
+      pc.addEventListener("track", (ev) => {
+        log(`Remote track: kind=${ev.track.kind}`);
+        remoteStream.addTrack(ev.track);
+      });
 
-    u.onstart = () => {
-      isTalking = true;
-      setStatus('Speaking…');
-      setMouth(true);
-      // Fallback mouth ticker if boundary events are scarce
-      boundaryTicker = setInterval(() => {
-        mouthEl.style.transform = (mouthEl.style.transform === 'scaleY(1.9)') ? 'scaleY(1.0)' : 'scaleY(1.9)';
-      }, Math.max(60, 140 / u.rate));
-    };
-    u.onend = () => {
-      isTalking = false;
-      setStatus('Done');
-      setMouth(false);
-      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
-    };
-    u.onerror = (e) => {
-      console.warn(e);
-      isTalking = false;
-      setStatus('Error while speaking.');
-      setMouth(false);
-      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
-    };
-    u.onboundary = (ev) => {
-      if(ev.name === 'word' || ev.charIndex >= 0){
-        mouthEl.style.transform = 'scaleY(1.9)';
-        setTimeout(() => { if(isTalking) mouthEl.style.transform = 'scaleY(1.0)'; }, 70);
+      // 3) Optional: upstream mic if your LiveAvatar needs user audio
+      // try {
+      //   const mic = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      //   mic.getTracks().forEach(t => pc.addTrack(t, mic));
+      // } catch (e) {
+      //   log("Mic disabled or unavailable, continuing without upstream audio.");
+      // }
+
+      // 4) Connect WebSocket for signaling
+      ws = new WebSocket(SIGNALING_URL);
+      ws.onopen = async () => {
+        log("Signaling connected.");
+        // 5) Create data channel (optional, for text commands to avatar)
+        const dc = pc.createDataChannel("commands");
+        dc.onopen = () => log("Data channel open.");
+        dc.onmessage = (e) => log("DC message: " + e.data);
+
+        // 6) Exchange ICE candidates through WS
+        pc.onicecandidate = (ev) => {
+          if (ev.candidate && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "candidate", candidate: ev.candidate }));
+          }
+        };
+
+        // 7) Create and send Offer
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        });
+        await pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({ type: "offer", sdp: offer.sdp }));
+        log("Offer sent.");
+      };
+
+      ws.onmessage = async (message) => {
+        const data = JSON.parse(message.data);
+        if (data.type === "answer") {
+          log("Answer received.");
+          await pc.setRemoteDescription({ type: "answer", sdp: data.sdp });
+        } else if (data.type === "candidate" && data.candidate) {
+          log("Remote ICE candidate received.");
+          try {
+            await pc.addIceCandidate(data.candidate);
+          } catch (err) {
+            log("Error adding ICE candidate: " + err);
+          }
+        } else if (data.type === "error") {
+          log("Server error: " + data.message);
+        }
+      };
+
+      ws.onerror = (e) => log("WS error: " + JSON.stringify(e));
+      ws.onclose = () => log("Signaling closed.");
+    }
+
+    async function stop() {
+      disconnectBtn.disabled = true;
+      connectBtn.disabled = false;
+
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
+      ws = null;
+
+      if (pc) {
+        pc.getSenders().forEach(s => { try { s.track && s.track.stop(); } catch {} });
+        pc.getReceivers().forEach(r => { try { r.track && r.track.stop(); } catch {} });
+        pc.onicecandidate = null;
+        pc.ontrack = null;
+        pc.close();
       }
-    };
+      pc = null;
 
-    speechSynthesis.speak(u);
-  }
-  function stop(){
-    if('speechSynthesis' in window){
-      speechSynthesis.cancel();
-      isTalking = false;
-      setMouth(false);
-      setStatus('Stopped');
-      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
+      // Clear video
+      v.pause();
+      v.srcObject = null;
+      log("Disconnected.");
     }
-  }
 
-  // ====== STT (optional) ======
-  function toggleRecognition(){
-    if(rec && rec._active){ rec.stop(); return; }
-    if(!('webkitSpeechRecognition' in window)){
-      setStatus('Speech recognition not supported in this browser.');
-      return;
-    }
-    rec = new webkitSpeechRecognition();
-    rec.lang = 'en-US';
-    rec.continuous = false;
-    rec.interimResults = true;
-    rec.onstart = () => { rec._active = true; setStatus('Listening…'); micBtn.textContent = '🛑 Stop Mic'; };
-    rec.onresult = (e) => {
-      let final = '';
-      for(let i=e.resultIndex; i<e.results.length; i++){
-        if(e.results[i].isFinal) final += e.results[i][0].transcript;
-      }
-      if(final) textEl.value = final.trim();
-    };
-    rec.onerror = () => { setStatus('Mic error or permission denied.'); };
-    rec.onend = () => { rec._active = false; setStatus('Idle'); micBtn.textContent = '🎤 Mic'; };
-    rec.start();
-  }
+    connectBtn.addEventListener("click", start);
+    disconnectBtn.addEventListener("click", stop);
 
-  // ====== Pose control ======
-  function setState({idle, waving, walking}){
-    avatar.classList.toggle('idle', !!idle);
-    avatar.classList.toggle('waving', !!waving);
-    avatar.classList.toggle('walking', !!walking);
-    const active = walking ? 'Walking' : (waving ? 'Waving' : 'Idle');
-    setStatus(active + (isTalking ? ' + Speaking' : ''));
-  }
-
-  idleBtn.addEventListener('click', () => setState({idle:true, waving:false, walking:false}));
-  waveBtn.addEventListener('click', () => setState({
-    idle:false,
-    waving: !avatar.classList.contains('waving'),
-    walking: avatar.classList.contains('walking') // keep walking if already on
-  }));
-  walkBtn.addEventListener('click', () => setState({
-    idle:false,
-    waving: avatar.classList.contains('waving'), // keep wave if toggled
-    walking: !avatar.classList.contains('walking')
-  }));
-
-  // ====== Color binding (updates CSS variables) ======
-  function setVar(name, val){ document.documentElement.style.setProperty(name, val); }
-  hairColor.addEventListener('input',  e => setVar('--hair',   e.target.value));
-  topColor.addEventListener('input',   e => setVar('--top',    e.target.value));
-  bottomColor.addEventListener('input',e => setVar('--bottom', e.target.value));
-  skinColor.addEventListener('input',  e => setVar('--skin',   e.target.value));
-
-  // ====== Buttons ======
-  speakBtn.addEventListener('click', () => speak());
-  stopBtn.addEventListener('click',  stop);
-  micBtn.addEventListener('click',   toggleRecognition);
-
-  // Init state
-  setState({idle:true});
-})();
-</script>
+    // Autoplay policies: muted attribute is set. User interaction (click) also helps.
+    // If your browser blocks autoplay with sound, keep `muted` on the <video>.
+  </script>
 </body>
 </html>
-``

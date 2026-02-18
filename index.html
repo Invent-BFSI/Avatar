@@ -1,51 +1,384 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>AI Assistant</title>
-  <link rel="stylesheet" href="style.css" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Female Avatar with Voice (TTS + optional STT)</title>
+<style>
+  :root{
+    --bg:#0f172a;
+    --panel:#111827;
+    --accent:#6366f1;
+    --text:#e5e7eb;
+    --muted:#9ca3af;
+    --lip:#b91c1c;
+    --skin:#f0d1c8;
+    --hair:#2d1b16;
+    --shirt:#3b82f6;
+  }
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
+    background: radial-gradient(1200px 700px at 10% 10%, #1f2937 10%, var(--bg) 55%),
+                radial-gradient(800px 600px at 90% 20%, #0b1223 10%, var(--bg) 55%);
+    color:var(--text);
+    min-height:100dvh;
+    display:grid;
+    place-items:center;
+  }
+  .wrap{
+    width:min(960px,92vw);
+    display:grid;
+    grid-template-columns: 380px 1fr;
+    gap:22px;
+  }
+  @media (max-width:900px){
+    .wrap{ grid-template-columns: 1fr; }
+  }
+  .card{
+    background:linear-gradient(180deg, #0b1223 0%, var(--panel) 100%);
+    border:1px solid #1f2937;
+    border-radius:16px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+  }
+  .avatar-card{
+    display:grid;
+    place-items:center;
+    padding:20px;
+  }
+  .controls-card{
+    padding:20px;
+  }
+  h1{
+    font-size:1.25rem; margin:0 0 10px;
+  }
+  .hint{ color:var(--muted); font-size:.9rem; margin-bottom:16px; }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .row > * { flex:1; }
+  textarea{
+    width:100%;
+    min-height:90px;
+    resize:vertical;
+    border-radius:12px;
+    border:1px solid #374151;
+    background:#0b1223;
+    color:var(--text);
+    padding:12px 14px;
+    outline:none;
+  }
+  select, input[type="range"]{
+    width:100%;
+  }
+  select{
+    border-radius:10px;
+    padding:10px 12px;
+    background:#0b1223;
+    color:var(--text);
+    border:1px solid #374151;
+    outline:none;
+  }
+  .btn{
+    cursor:pointer;
+    border:none;
+    border-radius:12px;
+    color:white;
+    background:linear-gradient(135deg, var(--accent), #7c3aed);
+    padding:12px 16px;
+    font-weight:600;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    justify-content:center;
+    transition:transform .05s ease, filter .2s ease, opacity .2s ease;
+    user-select:none;
+  }
+  .btn.secondary{
+    background:#1f2937;
+    border:1px solid #374151;
+    color:var(--text);
+  }
+  .btn:active{ transform:scale(.98); }
+  .btn[disabled]{ opacity:.6; cursor:not-allowed; }
+  .stack{ display:grid; gap:12px; }
+  .two{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+  @media (max-width:600px){ .two{ grid-template-columns:1fr; } }
+
+  /* Avatar */
+  .stage{
+    width:100%;
+    max-width:330px;
+    aspect-ratio:1/1.15;
+    display:grid;
+    place-items:center;
+  }
+  .talking .mouth { transform:scaleY(1.9); fill:#e11d48; }
+  .mouth{
+    transition: transform 60ms ease, fill 160ms ease;
+    transform-origin:50% 50%;
+    fill:var(--lip);
+  }
+  .blink{
+    transform-origin:50% 50%;
+    animation: blink 6s infinite;
+  }
+  @keyframes blink{
+    0%, 97%, 100% { transform:scaleY(1); }
+    98%, 99% { transform:scaleY(.05); }
+  }
+  .status{
+    margin-top:10px;
+    color:var(--muted);
+    font-size:.9rem;
+    text-align:center;
+  }
+  .footer-hint{
+    margin-top:8px; color:var(--muted); font-size:.8rem;
+  }
+</style>
 </head>
 <body>
-  <main class="container">
-    <header class="topbar">
-      <div class="brand">
-        <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="10" fill="#2563eb"/>
+  <div class="wrap">
+    <!-- Avatar Panel -->
+    <section class="card avatar-card">
+      <div id="avatarStage" class="stage" aria-label="Speaking avatar">
+        <!-- Simple female-styled SVG avatar -->
+        <svg viewBox="0 0 260 300" width="100%" role="img" aria-labelledby="title desc">
+          <title id="title">Female Avatar</title>
+          <desc id="desc">A friendly female avatar with short hair and a blue shirt.</desc>
+          <!-- Hair background -->
+          <ellipse cx="130" cy="105" rx="90" ry="85" fill="var(--hair)"/>
+          <!-- Neck -->
+          <rect x="110" y="160" width="40" height="40" rx="8" fill="var(--skin)"/>
+          <!-- Face -->
+          <ellipse cx="130" cy="120" rx="70" ry="75" fill="var(--skin)"/>
+          <!-- Ears -->
+          <ellipse cx="60" cy="120" rx="10" ry="14" fill="var(--skin)"/>
+          <ellipse cx="200" cy="120" rx="10" ry="14" fill="var(--skin)"/>
+          <!-- Hair fringe -->
+          <path d="M60,100 C85,40 175,40 200,100 C180,90 160,88 130,94 C100,100 80,95 60,100Z" fill="var(--hair)"/>
+          <!-- Eyes -->
+          <g class="blink">
+            <ellipse cx="100" cy="120" rx="10" ry="6" fill="#1f2937"/>
+            <ellipse cx="160" cy="120" rx="10" ry="6" fill="#1f2937"/>
+          </g>
+          <!-- Brows -->
+          <path d="M85,105 q15 -10 30 0" stroke="#1f2937" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M145,105 q15 -10 30 0" stroke="#1f2937" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <!-- Nose -->
+          <path d="M130,120 q-4 10 0 16" stroke="#9b6c63" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <!-- Mouth -->
+          <ellipse id="mouth" class="mouth" cx="130" cy="150" rx="12" ry="5"/>
+          <!-- Shirt -->
+          <path d="M70,200 q60 -20 120 0 v70 H70 Z" fill="var(--shirt)"/>
+          <!-- Shoulders -->
+          <path d="M40,230 q90 -50 180 0 v20 H40 Z" fill="#2563eb"/>
         </svg>
-        <span>AI Assistant</span>
       </div>
-      <div class="session">
-        <span id="sessionId">Session: —</span>
-      </div>
-    </header>
+      <div id="status" class="status">Status: Idle</div>
+      <div class="footer-hint">Tip: Try changing the voice, rate, and pitch below.</div>
+    </section>
 
-    <section class="stage">
-      <div class="avatar">
-        <!-- The Avatar (TTS) WebRTC stream will render here -->
-        <video id="avatarVideo" autoplay playsinline muted></video>
-      </div>
+    <!-- Controls Panel -->
+    <section class="card controls-card">
+      <h1>Talk with the Avatar</h1>
+      <div class="hint">Type something and click <strong>Speak</strong>. Use the mic to dictate (Chrome/Edge).</div>
 
-      <div class="chat">
-        <ul id="messages" class="messages" aria-live="polite" aria-label="Message list"></ul>
+      <div class="stack">
+        <textarea id="text" placeholder="Hello! I can speak using your browser's voice. What should I say?">Hi there! I’m your friendly avatar. How can I help today?</textarea>
 
-        <form id="composer" class="composer" autocomplete="off">
-          <button id="micBtn" type="button" class="btn icon" title="Hold to talk" aria-label="Hold to talk">
-            🎤
-          </button>
-          <input id="textInput" type="text" placeholder="Type a message..." aria-label="Type a message" />
-          <button id="sendBtn" type="submit" class="btn primary" aria-label="Send">Send</button>
-        </form>
+        <div class="two">
+          <div class="stack">
+            <label for="voice">Voice</label>
+            <select id="voice" aria-label="Voice selector"></select>
+          </div>
+          <div class="stack">
+            <label for="rate">Rate: <span id="rateVal">1.00</span></label>
+            <input id="rate" type="range" min="0.6" max="1.4" step="0.01" value="1.00" />
+          </div>
+        </div>
 
-        <div class="toolbar">
-          <button id="startAvatarBtn" type="button" class="btn" aria-label="Connect avatar stream">Connect Avatar</button>
-          <button id="stopAvatarBtn" type="button" class="btn" aria-label="Disconnect avatar stream">Disconnect</button>
+        <div class="two">
+          <div class="stack">
+            <label for="pitch">Pitch: <span id="pitchVal">1.00</span></label>
+            <input id="pitch" type="range" min="0.5" max="2" step="0.01" value="1.00" />
+          </div>
+          <div class="stack">
+            <label for="volume">Volume: <span id="volVal">1.00</span></label>
+            <input id="volume" type="range" min="0" max="1" step="0.01" value="1.00" />
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="speakBtn" class="btn">🔊 Speak</button>
+          <button id="stopBtn" class="btn secondary">⏹ Stop</button>
+          <button id="micBtn" class="btn secondary" title="Start/Stop Recognition">🎤 Mic</button>
         </div>
       </div>
     </section>
-  </main>
+  </div>
 
-  <script src="./app.js"></script>
+<script>
+(() => {
+  const textEl = document.getElementById('text');
+  const voiceEl = document.getElementById('voice');
+  const rateEl = document.getElementById('rate');
+  const pitchEl = document.getElementById('pitch');
+  const volEl = document.getElementById('volume');
+  const rateVal = document.getElementById('rateVal');
+  const pitchVal = document.getElementById('pitchVal');
+  const volVal = document.getElementById('volVal');
+  const speakBtn = document.getElementById('speakBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const micBtn = document.getElementById('micBtn');
+  const statusEl = document.getElementById('status');
+  const avatarStage = document.getElementById('avatarStage');
+  const mouthEl = document.getElementById('mouth');
+
+  let voices = [];
+  let isTalking = false;
+  let rec = null;
+  let boundaryTicker = null;
+
+  function setStatus(s){ statusEl.textContent = 'Status: ' + s; }
+  function setMouth(open){
+    if(open){ avatarStage.classList.add('talking'); }
+    else { avatarStage.classList.remove('talking'); }
+  }
+
+  function populateVoices() {
+    voices = speechSynthesis.getVoices();
+
+    // Try to pick a "female-sounding" voice by common names.
+    // There is no standard gender flag; this is heuristic.
+    const preferredNames = [
+      // Common on Windows/Edge
+      'Microsoft Zira', 'Microsoft Aria Online', 'Microsoft Jenny',
+      // Google voices
+      'Google UK English Female', 'Google US English', 'en-US-Wavenet-F', 'en-US-Neural2-F',
+      // Apple
+      'Samantha', 'Victoria', 'Allison', 'Ava', 'Nicky'
+    ];
+
+    voiceEl.innerHTML = '';
+    voices.forEach((v, i) => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = `${v.name} (${v.lang})${v.default ? ' — default' : ''}`;
+      voiceEl.appendChild(opt);
+    });
+
+    // pick a preferred voice if available, else default
+    const chosen = voices.find(v => preferredNames.some(n => v.name.includes(n))) || voices.find(v => v.default) || voices[0];
+    if(chosen){
+      voiceEl.value = chosen.name;
+    }
+  }
+
+  // Some browsers load voices asynchronously
+  if ('speechSynthesis' in window) {
+    populateVoices();
+    if (typeof speechSynthesis.onvoiceschanged !== 'undefined') {
+      speechSynthesis.onvoiceschanged = populateVoices;
+    }
+  } else {
+    setStatus('Speech synthesis not supported in this browser.');
+    speakBtn.disabled = true;
+  }
+
+  rateEl.addEventListener('input', () => rateVal.textContent = Number(rateEl.value).toFixed(2));
+  pitchEl.addEventListener('input', () => pitchVal.textContent = Number(pitchEl.value).toFixed(2));
+  volEl.addEventListener('input', () => volVal.textContent = Number(volEl.value).toFixed(2));
+
+  function speak(text){
+    if(!('speechSynthesis' in window)) return;
+    if(speechSynthesis.speaking){ speechSynthesis.cancel(); } // interrupt
+
+    const u = new SpeechSynthesisUtterance(text || textEl.value.trim());
+    const selected = voices.find(v => v.name === voiceEl.value);
+    if(selected) u.voice = selected;
+    u.rate = Number(rateEl.value);
+    u.pitch = Number(pitchEl.value);
+    u.volume = Number(volEl.value);
+
+    u.onstart = () => {
+      isTalking = true;
+      setStatus('Speaking…');
+      setMouth(true);
+      // Fallback mouth animation ticker (approx beat)
+      boundaryTicker = setInterval(() => {
+        mouthEl.style.transform = mouthEl.style.transform === 'scaleY(1.9)' ? 'scaleY(1.0)' : 'scaleY(1.9)';
+      }, Math.max(60, 140 / u.rate));
+    };
+    u.onend = () => {
+      isTalking = false;
+      setStatus('Done');
+      setMouth(false);
+      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
+    };
+    u.onerror = (e) => {
+      console.error(e);
+      setStatus('Error while speaking.');
+      isTalking = false;
+      setMouth(false);
+      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
+    };
+    // Use boundary events to modulate mouth more realistically (when available)
+    u.onboundary = (ev) => {
+      if(ev.name === 'word' || ev.charIndex >= 0){
+        mouthEl.style.transform = 'scaleY(1.9)';
+        setTimeout(() => { if(isTalking) mouthEl.style.transform = 'scaleY(1.0)'; }, 70);
+      }
+    };
+
+    speechSynthesis.speak(u);
+  }
+
+  function stop(){
+    if('speechSynthesis' in window){
+      speechSynthesis.cancel();
+      isTalking = false;
+      setMouth(false);
+      setStatus('Stopped');
+      if(boundaryTicker){ clearInterval(boundaryTicker); boundaryTicker = null; mouthEl.style.transform=''; }
+    }
+  }
+
+  // Optional: Speech-to-Text (Chrome/Edge)
+  function toggleRecognition(){
+    if(rec && rec._active){
+      rec.stop();
+      return;
+    }
+    if(!('webkitSpeechRecognition' in window)){
+      setStatus('Speech recognition not supported in this browser.');
+      return;
+    }
+    rec = new webkitSpeechRecognition();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = true;
+
+    rec.onstart = () => { rec._active = true; setStatus('Listening…'); micBtn.textContent = '🛑 Stop Mic'; };
+    rec.onresult = (e) => {
+      let final = '';
+      for(let i = e.resultIndex; i < e.results.length; i++){
+        const res = e.results[i];
+        if(res.isFinal) final += res[0].transcript;
+      }
+      if(final){
+        textEl.value = final.trim();
+      }
+    };
+    rec.onerror = (e) => { console.warn(e); setStatus('Mic error or permission denied.'); };
+    rec.onend = () => { rec._active = false; setStatus('Idle'); micBtn.textContent = '🎤 Mic'; };
+
+    rec.start();
+  }
+
+  speakBtn.addEventListener('click', () => speak());
+  stopBtn.addEventListener('click', stop);
+  micBtn.addEventListener('click', toggleRecognition);
+})();
+</script>
 </body>
-
 </html>

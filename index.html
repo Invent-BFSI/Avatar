@@ -1,204 +1,145 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <title>Girl Avatar — TTS Lip Sync</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="utf-8" />
+  <title>Azure Real-time Avatar (WebRTC)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { margin: 0; background:#0b1020; color:#fff; font-family: system-ui, sans-serif; min-height: 100svh; display:grid; place-items:center; padding:20px; }
-    .box { width: min(780px, 100%); display: grid; gap: 12px; }
-    .card { background:#0f1633; border:1px solid #21306a; border-radius:16px; padding:14px; }
-    textarea { width: 100%; min-height: 90px; border-radius:10px; border:1px solid #2a3c85; background:#0d1430; color:#fff; padding:10px; }
-    select, button { background:#1a2561; color:#fff; border:1px solid #2a3c85; border-radius:10px; padding:8px 12px; }
-    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
-    .meter { height: 10px; border-radius:6px; background:#0e1531; overflow:hidden; border:1px solid #1e2a63; }
-    .bar { height:100%; width:0%; background: linear-gradient(90deg, #52e5ff, #ff78b9); transition: width .08s linear; }
-    .avatar{ display:grid; place-items:center; padding:18px; background:#0e1531; border-radius:16px; border:1px solid #1e2a63;}
-    svg{ width:320px; height:320px;}
-    .small{ font-size:12px; opacity:.85; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; }
+    #video { width: 100%; max-width: 960px; aspect-ratio: 16/9; background: #000; }
+    #controls { margin-top: 12px; display: flex; gap: 8px; }
+    input[type="text"] { flex: 1; padding: 8px; }
+    button { padding: 8px 12px; }
+    #log { font-size: 12px; white-space: pre-wrap; background: #f6f8fa; margin-top: 12px; padding: 8px; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <div class="card">
-      <div style="font-weight:700; font-size:18px;">Girl Avatar — TTS</div>
-      <div class="row" style="margin-top:8px;">
-        <select id="voiceSel"></select>
-        <input id="rate" type="range" min="0.5" max="1.5" step="0.05" value="1" title="Rate"/>
-        <span class="small">Rate</span>
-        <input id="pitch" type="range" min="0" max="2" step="0.05" value="1.2" title="Pitch"/>
-        <span class="small">Pitch</span>
-        <input id="volume" type="range" min="0" max="1" step="0.05" value="1" title="Volume"/>
-        <span class="small">Vol</span>
-      </div>
-      <textarea id="text">Hey! I’m your virtual assistant. How can I help you today?</textarea>
-      <div class="row">
-        <button id="speakBtn">Speak</button>
-        <button id="stopBtn" disabled>Stop</button>
-      </div>
-      <div class="meter"><div id="bar" class="bar"></div></div>
-    </div>
+  <h1>Azure Real-time Avatar</h1>
 
-    <div class="avatar card">
-      <!-- Reuse the same SVG avatar/mouth -->
-      <svg viewBox="0 0 400 400" aria-label="Girl Avatar">
-        <path d="M60,170 C60,60 160,40 200,40 C240,40 340,60 340,170 L340,300 L60,300 Z" fill="#2c2444"/>
-        <ellipse cx="200" cy="200" rx="130" ry="150" fill="#ffd9e6"/>
-        <ellipse cx="160" cy="190" rx="16" ry="12" fill="#1b1b2d"/>
-        <ellipse cx="240" cy="190" rx="16" ry="12" fill="#1b1b2d"/>
-        <circle cx="166" cy="186" r="3" fill="#fff"/>
-        <circle cx="246" cy="186" r="3" fill="#fff"/>
-        <path d="M200 195 C198 208, 202 208, 200 215" stroke="#e6a9bd" stroke-width="3" fill="none" stroke-linecap="round"/>
-        <g id="mouth" transform="translate(200,245)">
-          <path id="lipTop" d="M -26 0 Q 0 -6 26 0" fill="none" stroke="#ff78b9" stroke-width="4" stroke-linecap="round"/>
-          <path id="lipBot" d="M -26 0 Q 0 6 26 0"  fill="none" stroke="#ff78b9" stroke-width="4" stroke-linecap="round"/>
-          <rect id="mouthHole" x="-18" y="-3" width="36" height="6" rx="10" fill="#6c1a44"/>
-          <rect id="teeth" x="-16" y="-2" width="32" height="3" rx="2" fill="#ffdfea" opacity="0.7"/>
-          <ellipse id="tongue" cx="0" cy="6" rx="10" ry="3" fill="#ff6a9c" opacity="0"/>
-        </g>
-        <ellipse cx="130" cy="215" rx="18" ry="10" fill="#ffb1cd" opacity="0.6"/>
-        <ellipse cx="270" cy="215" rx="18" ry="10" fill="#ffb1cd" opacity="0.6"/>
-        <path d="M90,300 C130,330 270,330 310,300 L330,355 L70,355 Z" fill="#9aa6ff" />
-        <path d="M160,300 L200,330 L240,300" fill="#d6dbff"/>
-      </svg>
-    </div>
+  <video id="video" autoplay playsinline muted></video>
+  <audio id="audio" autoplay></audio>
+
+  <div id="controls">
+    <input id="region" placeholder="Speech region e.g. westus2" />
+    <input id="key" placeholder="(Dev only) Speech key" />
+    <button id="start">Start Session</button>
   </div>
 
-  <!-- Hidden <audio> driven by SpeechSynthesis via MediaStreamDestination -->
-  <audio id="out" autoplay></audio>
+  <div id="speakRow" style="margin-top:8px; display:none;">
+    <input id="text" placeholder="Type something for the avatar to say…" />
+    <button id="speak">Speak</button>
+    <button id="stop">Stop</button>
+    <button id="close">Close Session</button>
+  </div>
+
+  <div id="log"></div>
+
+  <!-- Load Speech SDK (official) -->
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
 
   <script>
-    const voiceSel = document.getElementById('voiceSel');
-    const rateEl = document.getElementById('rate');
-    const pitchEl = document.getElementById('pitch');
-    const volumeEl = document.getElementById('volume');
-    const textEl = document.getElementById('text');
-    const speakBtn = document.getElementById('speakBtn');
-    const stopBtn = document.getElementById('stopBtn');
-    const bar = document.getElementById('bar');
+    const $ = (id) => document.getElementById(id);
+    const log = (...a) => { console.log(...a); $('log').textContent += a.join(' ') + '\n'; };
 
-    // Mouth SVG parts
-    const mouthGroup = document.getElementById('mouth');
-    const mouthHole = document.getElementById('mouthHole');
-    const tongue = document.getElementById('tongue');
-    const teeth = document.getElementById('teeth');
+    let peer, avatarSynthesizer;
 
-    let audioCtx, analyser, dst, outNode, srcNode, rafId;
-    let lastOpen = 0;
-    const smoothing = 0.78;
+    async function getRelay() {
+      const r = await fetch('/api/avatar/relay-token');
+      if (!r.ok) throw new Error('Failed to fetch relay token');
+      return r.json(); // { urls:[...], username:'...', credential:'...', ttl:'...' }
+    }
 
-    function ensureAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        analyser = audioCtx.createAnalyser();
-        analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.7;
-        dst = audioCtx.createMediaStreamDestination();
-        // Connect the destination to an <audio> to hear it
-        const out = document.getElementById('out');
-        out.srcObject = dst.stream;
-        out.volume = 1.0;
-        // Also analyze the same stream
-        outNode = audioCtx.createMediaStreamSource(dst.stream);
-        outNode.connect(analyser);
-        analyser.connect(audioCtx.destination); // optional: also route to speakers for timing
+    async function startSession() {
+      const region = $('region').value.trim();
+      const key = $('key').value.trim();
+
+      if (!region || !key) {
+        return alert('Enter your Speech resource region and key (for local dev).\nIn production, mint a short-lived Speech token server-side.');
       }
-    }
 
-    // Populate voices & prefer female
-    function loadVoices() {
-      const voices = speechSynthesis.getVoices();
-      voiceSel.innerHTML = "";
-      voices.forEach((v, i) => {
-        const opt = document.createElement('option');
-        opt.value = v.name;
-        opt.textContent = `${v.name} — ${v.lang}${v.default ? " (default)" : ""}`;
-        voiceSel.appendChild(opt);
-      });
-      // Try to auto-select a voice likely female by name
-      const prefer = voices.find(v => /female|woman|sara|salli|joanna|jenny|aria|zira|linda|maya|emma|olivia|susan/i.test(v.name));
-      if (prefer) voiceSel.value = prefer.name;
-    }
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    loadVoices();
+      log('Fetching ICE relay details…');
+      const relay = await getRelay();
+      const iceServers = [{
+        // Use only TURN URL per docs; STUN/turn both may be returned, but TURN is recommended for reliable media relay.
+        urls: relay.urls.filter(u => u.startsWith('turn:')),
+        username: relay.username,
+        credential: relay.credential
+      }];
 
-    speakBtn.addEventListener('click', async () => {
-      ensureAudio();
-      await audioCtx.resume();
+      // 1) Create WebRTC PeerConnection with ICE (TURN) servers
+      peer = new RTCPeerConnection({ iceServers });
+      peer.oniceconnectionstatechange = () => log('ICE state:', peer.iceConnectionState);
 
-      // Cancel any ongoing speech
-      speechSynthesis.cancel();
-
-      const utt = new SpeechSynthesisUtterance(textEl.value.trim());
-      // voice
-      const voice = speechSynthesis.getVoices().find(v => v.name === voiceSel.value);
-      if (voice) utt.voice = voice;
-      // params
-      utt.rate = parseFloat(rateEl.value);
-      utt.pitch = parseFloat(pitchEl.value);
-      utt.volume = parseFloat(volumeEl.value);
-
-      // Route TTS audio into our AudioContext (implementation detail):
-      // Most browsers pipe SpeechSynthesis directly to audio output and not to WebAudio.
-      // A robust workaround is to use "speak" and analyze via microphone loopback or
-      // to pre-generate audio. For demo, we keep amplitude animation time-based:
-      // We'll start an analysis loop and rely on actual speaker output presence.
-      // (Some browsers won’t expose TTS to WebAudio; amplitude will stay low.)
-      // For better accuracy, prefer pre-recorded audio (Option 1) or a TTS API that returns audio bytes.
-
-      speechSynthesis.speak(utt);
-      speakBtn.disabled = true;
-      stopBtn.disabled = false;
-
-      utt.onend = () => {
-        stopBtn.disabled = true;
-        speakBtn.disabled = false;
-        cancelAnimationFrame(rafId);
-        setMouthOpen(0);
-        bar.style.width = '0%';
+      // 2) Wire remote tracks to <video>/<audio>
+      peer.ontrack = (event) => {
+        if (event.track.kind === 'video') {
+          $('video').srcObject = event.streams[0];
+        }
+        if (event.track.kind === 'audio') {
+          $('audio').srcObject = event.streams[0];
+        }
       };
+      // Offer to receive one video and one audio track (bidirectional by default)
+      peer.addTransceiver('video', { direction: 'sendrecv' });
+      peer.addTransceiver('audio', { direction: 'sendrecv' });
 
-      loop();
-    });
+      // 3) Create Speech + Avatar configs
+      const SpeechSDK = window.SpeechSDK;
+      const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(key, region);
+      // Choose a voice (you can change it later)
+      speechConfig.speechSynthesisVoiceName = "en-US-JennyNeural";
 
-    stopBtn.addEventListener('click', () => {
-      speechSynthesis.cancel();
-    });
+      // Video format can be customized (crop/resize), but defaults to 16:9 1080p
+      const avatarConfig = new SpeechSDK.AvatarConfig(
+        "lisa",          // character
+        "casual-sitting" // style
+      );
+      // Example background color (green for client-side matting if you want)
+      avatarConfig.backgroundColor = "#00FF00FF";
 
-    function loop() {
-      const buf = new Uint8Array(analyser.fftSize);
-      analyser.getByteTimeDomainData(buf);
+      // 4) Start the avatar (this negotiates WebRTC with the service)
+      log('Starting avatar…');
+      avatarSynthesizer = new SpeechSDK.AvatarSynthesizer(speechConfig, avatarConfig);
 
-      let sumSq = 0;
-      for (let i = 0; i < buf.length; i++) {
-        const v = (buf[i] - 128) / 128;
-        sumSq += v * v;
+      await avatarSynthesizer.startAvatarAsync(peer)
+        .then(() => log('Avatar started. You should see idle video.'))
+        .catch((err) => { throw new Error('Avatar failed to start: ' + err); });
+
+      // UI
+      $('speakRow').style.display = 'flex';
+      $('video').muted = false; // unmute after user gesture
+    }
+
+    async function speak() {
+      const text = $('text').value.trim();
+      if (!text) return;
+      try {
+        const result = await avatarSynthesizer.speakTextAsync(text);
+        if (result.reason === SpeechSDK.ResultReason.SynthesizingAudioCompleted) {
+          log('Synthesis complete.');
+        } else {
+          log('Synthesis did not complete. ResultId:', result.resultId);
+        }
+      } catch (e) {
+        log('Speak error:', e.message);
       }
-      const rms = Math.sqrt(sumSq / buf.length);
-      const openTarget = clamp((rms - 0.015) / (0.22 - 0.015), 0, 1);
-
-      lastOpen = lastOpen * smoothing + openTarget * (1 - smoothing);
-
-      bar.style.width = Math.round(lastOpen * 100) + '%';
-      setMouthOpen(lastOpen);
-
-      rafId = requestAnimationFrame(loop);
     }
 
-    function setMouthOpen(x) {
-      const baseH = 6, maxExtra = 22;
-      const h = baseH + maxExtra * easeOut(x);
-      mouthGroup.setAttribute('transform', `translate(200,245) scale(1, ${1 + x * 0.65})`);
-      mouthHole.setAttribute('y', String(-h/2));
-      mouthHole.setAttribute('height', String(h));
-      teeth.setAttribute('opacity', String(0.7 * (1 - x)));
-      tongue.setAttribute('opacity', String(Math.max(0, (x - 0.25) * 1.5)));
-      tongue.setAttribute('ry', String(3 + 6 * x));
-      tongue.setAttribute('cy', String(6 + 5 * x));
+    async function stopSpeaking() {
+      try { await avatarSynthesizer.stopSpeakingAsync(); } catch {}
     }
 
-    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-    function easeOut(t) { return 1 - Math.pow(1 - t, 2); }
+    function closeSession() {
+      try { avatarSynthesizer?.close(); } catch {}
+      try { peer?.close(); } catch {}
+      log('Session closed.');
+      $('speakRow').style.display = 'none';
+    }
+
+    $('start').addEventListener('click', startSession);
+    $('speak').addEventListener('click', speak);
+    $('stop').addEventListener('click', stopSpeaking);
+    $('close').addEventListener('click', closeSession);
   </script>
 </body>
 </html>
